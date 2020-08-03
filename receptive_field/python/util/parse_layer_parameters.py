@@ -30,7 +30,7 @@ _UNCHANGED_RF_LAYER_OPS = [
     "Add", "AddV2", "BiasAdd", "Cast", "Ceil", "ConcatV2", "Const", "Floor",
     "FusedBatchNorm", "FusedBatchNormV3", "Identity", "Log", "Mul", "Pow",
     "ReadVariableOp", "RealDiv", "Relu", "Relu6", "Round", "Rsqrt", "Softplus",
-    "Sub", "VarHandleOp", "VariableV2", "LRN", "GreaterEqual"
+    "Sub", "VarHandleOp", "VariableV2", "LRN", "GreaterEqual", "Merge", "Switch", "Transpose", "Conv2DBackpropInput", "Pack", "StridedSlice", "Shape", "PlaceholderWithDefault"
 ]
 
 # Different ways in which padding modes may be spelled.
@@ -89,6 +89,8 @@ def _conv_kernel_size(node, name_to_node):
     weights_layer_param_name = weights_layer_read_name[:-5]
   elif weights_layer_read_name.endswith("/Conv2D/ReadVariableOp"):
     weights_layer_param_name = weights_layer_read_name[:-22] + "/kernel"
+  elif weights_layer_read_name.endswith("deconv2/conv2d_transpose/ReadVariableOp"):
+    weights_layer_param_name = weights_layer_read_name
   else:
     raise ValueError(
         "Weight layer's name input to conv layer does not end with '/read' or "
@@ -196,19 +198,20 @@ def _pool_kernel_size(node, name_to_node):
     ksize_node = name_to_node[ksize_input_name]
     value = ksize_node.attr["value"]
     t = tf.make_ndarray(value.tensor)
-    kernel_size_y = t[1]
-    kernel_size_x = t[2]
+    kernel_size_y = t[2]
+    kernel_size_x = t[3]
     if t[0] != 1:
       raise ValueError("pool ksize for first dim is not 1")
-    if t[3] != 1:
+    if t[1] != 1:
       raise ValueError("pool ksize for last dim is not 1")
   else:
     ksize = node.attr["ksize"]
-    kernel_size_y = ksize.list.i[1]
-    kernel_size_x = ksize.list.i[2]
+    print("kernel size: ", ksize.list.i)
+    kernel_size_y = ksize.list.i[2]
+    kernel_size_x = ksize.list.i[3]
     if ksize.list.i[0] != 1:
       raise ValueError("pool ksize for first dim is not 1")
-    if ksize.list.i[3] != 1:
+    if ksize.list.i[1] != 1:
       raise ValueError("pool ksize for last dim is not 1")
   return kernel_size_x, kernel_size_y
 

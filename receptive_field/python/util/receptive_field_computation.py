@@ -155,7 +155,7 @@ def compute_receptive_field_from_graph_def(graph_def,
                                            input_node,
                                            output_node,
                                            stop_propagation=None,
-                                           input_resolution=None):
+                                           input_resolution=[None,3,608,960]):
   """Computes receptive field (RF) parameters from a Graph or GraphDef object.
 
   The algorithm stops the calculation of the receptive field whenever it
@@ -212,7 +212,7 @@ def compute_receptive_field_from_graph_def(graph_def,
       graph_def=graph_def,
       input_node_name=input_node,
       input_node_size=input_resolution)
-
+  #print("Name to node: ", name_to_node)
   # Sort in reverse topological order.
   ordered_node_info = sorted(node_info.items(), key=lambda x: -x[1].order)
 
@@ -248,7 +248,9 @@ def compute_receptive_field_from_graph_def(graph_def,
       logging.vlog(3, "%10d %-100s %-20s" % (o, node.name[:90], node.op))
     else:
       continue
-
+    # print("Node name: ", node.name)
+    # if(node.name.startswith('concat')):
+    #   print("Concat Node name", node.name)
     # When we find input node, we can stop.
     if node.name == input_node:
       break
@@ -258,6 +260,7 @@ def compute_receptive_field_from_graph_def(graph_def,
     if not found_output_node:
       if node.name == output_node:
         found_output_node = True
+        print("Output node found!")
 
     if found_output_node:
       if node.name not in rf_sizes_x:
@@ -308,7 +311,11 @@ def compute_receptive_field_from_graph_def(graph_def,
            effective_padding_input_y))
 
       # Loop over this node's inputs and potentially propagate information down.
+      #print("node.input: ", node.input)
       for inp_name in node.input:
+        if inp_name.endswith(':1'):# == u'blk7_icp1_br2_3x3b_m32_bn/cond/FusedBatchNorm/Switch:1':
+          #inp_name = u'blk7_icp1_br2_3x3b_m32_bn/cond/FusedBatchNorm_1/Switch'
+          continue
         # Stop the propagation of the receptive field.
         if any(inp_name.startswith(stop) for stop in stop_propagation):
           logging.vlog(3, "Skipping explicitly ignored node %s.", inp_name)
@@ -319,7 +326,7 @@ def compute_receptive_field_from_graph_def(graph_def,
           # The character "^" denotes a control dependency, so this input node
           # can be safely ignored.
           continue
-
+        #print("Name to node mapping: ", name_to_node.keys())
         inp_node = name_to_node[inp_name]
         logging.vlog(4, "inp_node = \n%s", inp_node)
         if inp_name in rf_sizes_x:
@@ -341,9 +348,11 @@ def compute_receptive_field_from_graph_def(graph_def,
           # be checked.
           if not undefined_padding:
             if effective_strides_x[inp_name] != effective_stride_input_x:
-              raise ValueError(
-                  "Graph is not aligned since effective stride from different "
-                  "paths is different in horizontal direction")
+              print(effective_strides_x[inp_name], effective_stride_input_x)
+              print("Stride Off by: ", effective_stride_input_x - effective_strides_x[inp_name])
+              # raise ValueError(
+              #     "Graph is not aligned since effective stride from different "
+              #     "paths is different in horizontal direction")
             if effective_strides_y[inp_name] != effective_stride_input_y:
               raise ValueError(
                   "Graph is not aligned since effective stride from different "
@@ -351,15 +360,21 @@ def compute_receptive_field_from_graph_def(graph_def,
             if (rf_sizes_x[inp_name] -
                 1) / 2 - effective_paddings_x[inp_name] != (
                     rf_size_input_x - 1) / 2 - effective_padding_input_x:
-              raise ValueError(
-                  "Graph is not aligned since center shift from different "
-                  "paths is different in horizontal direction")
+              a = (rf_sizes_x[inp_name] - 1) / 2 - effective_paddings_x[inp_name]
+              b = (rf_size_input_x - 1) / 2 - effective_padding_input_x
+              print("Center shift by: ", a-b)       
+              # raise ValueError(
+              #     "Graph is not aligned since center shift from different "
+              #     "paths is different in horizontal direction")
             if (rf_sizes_y[inp_name] -
                 1) / 2 - effective_paddings_y[inp_name] != (
                     rf_size_input_y - 1) / 2 - effective_padding_input_y:
-              raise ValueError(
-                  "Graph is not aligned since center shift from different "
-                  "paths is different in vertical direction")
+              a = (rf_sizes_y[inp_name] - 1) / 2 - effective_paddings_y[inp_name]
+              b = (rf_size_input_y - 1) / 2 - effective_padding_input_y
+              print("Center shift by: ", a-b)     
+              # raise ValueError(
+              #     "Graph is not aligned since center shift from different "
+              #     "paths is different in vertical direction")
           # Keep track of path with largest RF, for both directions.
           if rf_sizes_x[inp_name] < rf_size_input_x:
             rf_sizes_x[inp_name] = rf_size_input_x
@@ -380,7 +395,7 @@ def compute_receptive_field_from_graph_def(graph_def,
           effective_strides_y[inp_name] = effective_stride_input_y
           effective_paddings_x[inp_name] = effective_padding_input_x
           effective_paddings_y[inp_name] = effective_padding_input_y
-
+  print("RF sizes x ", rf_sizes_x)
   if not found_output_node:
     raise ValueError("Output node was not found")
   if input_node not in rf_sizes_x:
